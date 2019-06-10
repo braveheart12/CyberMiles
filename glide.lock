@@ -30,8 +30,8 @@ imports:
   subpackages:
   - sys/windows
 - name: github.com/ethereum/go-ethereum
-  version: 30218864cdd22cdfcd8908a5014e7ce7676a4044
-  repo: https://github.com/CyberMiles/go-ethereum.git
+  version: 557cc4935d94d6e1d6b947143788838ca98908f9
+  repo: https://github.com/second-state/lityvm.git
   subpackages:
   - accounts
   - accounts/keystore

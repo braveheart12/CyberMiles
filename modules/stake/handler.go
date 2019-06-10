@@ -367,9 +367,11 @@ func (c check) deactivateCandidacy(tx TxDeactivateCandidacy) error {
 }
 
 func (c check) delegate(tx TxDelegate) error {
-	err := VerifyCubeSignature(c.sender, c.ctx.GetNonce(), tx.CubeBatch, tx.Sig)
-	if err != nil {
-		return err
+	if tx.Sig != "" {
+		err := VerifyCubeSignature(c.sender, c.ctx.GetNonce(), tx.CubeBatch, tx.Sig)
+		if err != nil {
+			return err
+		}
 	}
 
 	candidate := GetCandidateByAddress(tx.ValidatorAddress)
@@ -383,7 +385,7 @@ func (c check) delegate(tx TxDelegate) error {
 		return ErrBadAmount()
 	}
 
-	err = checkBalance(c.ctx.EthappState(), c.sender, amount)
+	err := checkBalance(c.ctx.EthappState(), c.sender, amount)
 	if err != nil {
 		return err
 	}
@@ -577,8 +579,8 @@ func (d deliver) declareCandidacy(tx TxDeclareCandidacy, gasFee sdk.Int) error {
 	d.delegate(txDelegate)
 
 	candidate = GetCandidateByPubKey(pubKey) // candidate object was modified by the delegation operation.
-	cds := &CandidateDailyStake{CandidateId: candidate.Id, Amount: candidate.Shares, BlockHeight: d.ctx.BlockHeight()}
-	SaveCandidateDailyStake(cds)
+	//cds := &CandidateDailyStake{CandidateId: candidate.Id, Amount: candidate.Shares, BlockHeight: d.ctx.BlockHeight()}
+	//SaveCandidateDailyStake(cds)
 	candidate.PendingVotingPower = candidate.CalcVotingPower(d.ctx.BlockHeight())
 	updateCandidate(candidate)
 	return nil
@@ -610,12 +612,12 @@ func (d deliver) declareGenesisCandidacy(tx TxDeclareCandidacy, val types.Genesi
 
 	// delegate a part of the max staked CMT amount
 	amount := sdk.NewInt(val.Shares).Mul(sdk.E18Int).String()
-	txDelegate := TxDelegate{ValidatorAddress: d.sender, Amount: amount}
+	txDelegate := TxDelegate{ValidatorAddress: d.sender, Amount: amount, Source: utils.Cube}
 	d.delegate(txDelegate)
 
 	candidate = GetCandidateByPubKey(pubKey) // candidate object was modified by the delegation operation.
-	cds := &CandidateDailyStake{CandidateId: candidate.Id, Amount: candidate.Shares, BlockHeight: d.ctx.BlockHeight()}
-	SaveCandidateDailyStake(cds)
+	//cds := &CandidateDailyStake{CandidateId: candidate.Id, Amount: candidate.Shares, BlockHeight: d.ctx.BlockHeight()}
+	//SaveCandidateDailyStake(cds)
 	candidate.PendingVotingPower = candidate.CalcVotingPower(d.ctx.BlockHeight())
 	updateCandidate(candidate)
 	return nil
@@ -799,6 +801,15 @@ func (d deliver) delegate(tx TxDelegate) error {
 		d.ctx.EthappState().AddBalance(utils.HoldAccount, delegateAmount.Int)
 	}
 
+	var source string
+	if tx.Source == utils.Cube {
+		source = utils.Cube
+	} else if tx.Sig == "" {
+		source = utils.CmtWallet
+	} else {
+		source = utils.Cube
+	}
+
 	// create or update delegation
 	now := d.ctx.BlockTime()
 	delegation := GetDelegation(d.sender, candidate.Id)
@@ -816,11 +827,13 @@ func (d deliver) delegate(tx TxDelegate) error {
 			CompRate:              candidate.CompRate,
 			BlockHeight:           d.ctx.BlockHeight(),
 			CreatedAt:             now,
+			Source:                source,
 		}
 		SaveDelegation(delegation)
 	} else {
 		delegation.AddDelegateAmount(delegateAmount)
 		delegation.State = "Y"
+		delegation.Source = source
 		UpdateDelegation(delegation)
 	}
 
@@ -865,7 +878,7 @@ func (d deliver) withdraw(tx TxWithdraw) error {
 }
 
 func (d deliver) doWithdraw(delegation *Delegation, amount sdk.Int, candidate *Candidate, tx TxWithdraw) {
-	delegation.ReduceAverageStakingDate(amount)
+	//delegation.ReduceAverageStakingDate(amount)
 	delegation.AddPendingWithdrawAmount(amount)
 	UpdateDelegation(delegation)
 
@@ -1034,7 +1047,7 @@ func getRechargeAmount(maxAmount sdk.Int, candidate *Candidate, ssr sdk.Rat) (re
 	return
 }
 
-func RecordCandidateDailyStakes(blockHeight int64) error {
+/*func RecordCandidateDailyStakes(blockHeight int64) error {
 	candidates := GetActiveCandidates()
 	for _, candidate := range candidates {
 		cds := &CandidateDailyStake{CandidateId: candidate.Id, Amount: candidate.Shares, BlockHeight: blockHeight}
@@ -1045,7 +1058,7 @@ func RecordCandidateDailyStakes(blockHeight int64) error {
 	startBlockHeight := blockHeight - utils.ConvertDaysToHeight(90)
 	RemoveExpiredCandidateDailyStakes(startBlockHeight)
 	return nil
-}
+}*/
 
 func AccumulateDelegationsAverageStakingDate() error {
 	delegations := GetDelegations("Y")

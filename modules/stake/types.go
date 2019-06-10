@@ -96,7 +96,7 @@ func (c *Candidate) CalcVotingPower(blockHeight int64) (res int64) {
 	for _, d := range delegations {
 		var vp int64
 		// if the amount of staked CMTs is less than 1000, no awards will be distributed.
-		if d.Shares().LT(minStakingAmount) {
+		if d.ProfitableShares().LT(minStakingAmount) {
 			vp = 0
 			d.ResetVotingPower()
 		} else {
@@ -391,10 +391,16 @@ type Delegation struct {
 	BlockHeight           int64          `json:"block_height"`
 	AverageStakingDate    int64          `json:"average_staking_date"`
 	CandidateId           int64          `json:"candidate_id"`
+	Source                string         `json:"source"`
 }
 
 func (d *Delegation) Shares() (res sdk.Int) {
 	res = d.ParseDelegateAmount().Add(d.ParseAwardAmount()).Sub(d.ParseWithdrawAmount()).Sub(d.ParseSlashAmount()).Sub(d.ParsePendingWithdrawAmount())
+	return
+}
+
+func (d *Delegation) ProfitableShares() (res sdk.Int) {
+	res = d.ParseDelegateAmount().Add(d.ParseAwardAmount()).Sub(d.ParseWithdrawAmount()).Sub(d.ParseSlashAmount())
 	return
 }
 
@@ -453,48 +459,20 @@ func (d *Delegation) ResetVotingPower() {
 }
 
 func (d *Delegation) CalcVotingPower(sharesPercentage sdk.Rat, blockHeight int64) int64 {
-	/*
-		candidate := GetCandidateById(d.CandidateId)
-		tenDaysAgoHeight := blockHeight - utils.ConvertDaysToHeight(10)
-		ninetyDaysAgoHeight := blockHeight - utils.ConvertDaysToHeight(90)
-		snum := GetCandidateDailyStakeMaxValue(candidate.Id, tenDaysAgoHeight)
-		sdenom := GetCandidateDailyStakeMaxValue(candidate.Id, ninetyDaysAgoHeight)
-		if sdenom == 0 {
-			sdenom = 1
-		}
-		s := d.Shares().Div(sdk.E18Int).MulRat(sharesPercentage).Int64()
+	s := d.ProfitableShares().Div(sdk.E18Int).MulRat(sharesPercentage)
+	var vp int64
+	if d.Source == "cmt_wallet" {
+		vp = s.MulRat(sdk.NewRat(80, 100)).Int64()
+	} else {
+		vp = s.Int64()
+	}
 
-		t := d.AverageStakingDate
-		if t == 0 {
-			t = 1
-		} else if t > utils.HalfYear {
-			t = utils.HalfYear
-		}
-
-		one := sdk.OneRat
-		r1 := sdk.NewRat(snum, sdenom)
-		r2 := sdk.NewRat(t, 180)
-		r3 := sdk.NewRat(candidate.NumOfDelegators*4, 1)
-		r4 := sdk.NewRat(s, 1)
-
-		r1 = r1.Mul(r1)
-		r2 = r2.Add(one)
-		r3 = one.Sub(one.Quo(r3.Add(one)))
-		r3 = r3.Mul(r3)
-		x, _ := r1.Mul(r3).Mul(r4).Float64()
-		f2, _ := r2.Float64()
-		f2 = utils.RoundFloat(f2, 2)
-		l := math.Log2(f2)
-		vp := int64(math.Ceil(x * l)
-	*/
-
-	vp := d.Shares().Div(sdk.E18Int).MulRat(sharesPercentage).Int64()
 	d.VotingPower = vp
 	return vp
 }
 
 func (d *Delegation) Hash() []byte {
-	var excludedFields []string
+	excludedFields := []string{"source"}
 	bs := types.Hash(d, excludedFields)
 	hasher := ripemd160.New()
 	hasher.Write(bs)
